@@ -1,8 +1,9 @@
 // app/static/js/api.js
 
-const API_BASE = 'http://localhost:8000';; // или 'http://localhost:8000/api' если фронтенд отдельно
+// Определяем базовый URL в зависимости от окружения
+const API_BASE = '/api';
 
-// Вспомогательная функция для запросов с авторизацией
+
 async function apiRequest(endpoint, options = {}) {
     const token = localStorage.getItem('token');
     const headers = {
@@ -29,34 +30,49 @@ async function apiRequest(endpoint, options = {}) {
     }
 }
 
-// Функции для фильмов
 export const moviesApi = {
     search: (query, page = 1) => apiRequest(`/movies/search?query=${encodeURIComponent(query)}&page=${page}`),
     popular: (page = 1) => apiRequest(`/movies/popular?page=${page}`),
     details: (id) => apiRequest(`/movies/${id}`),
 };
 
-// Функции для пользователя (пример)
 export const userApi = {
     profile: (username) => apiRequest(`/users/${username}`),
     ratings: (username, status = '') => apiRequest(`/users/${username}/ratings${status ? `?status=${status}` : ''}`),
+    stats: (username) => apiRequest(`/users/${username}/stats`),
 };
 
-// Функции для аутентификации
 export const authApi = {
-    login: (username, password) => apiRequest('/auth/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ username, password }),
-    }),
-    register: (userData) => apiRequest('/auth/register', {
-        method: 'POST',
-        body: JSON.stringify(userData),
-    }),
+    register: async (username, email, password) => {
+        return apiRequest('/auth/register', {
+            method: 'POST',
+            body: JSON.stringify({ username, email, password }),
+        });
+    },
+    login: async (username, password) => {
+        const formData = new URLSearchParams();
+        formData.append('username', username);
+        formData.append('password', password);
+        const response = await fetch(`${API_BASE}/auth/token`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: formData,
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.detail || 'Ошибка входа');
+        }
+        localStorage.setItem('token', data.access_token);
+        return data;
+    },
     me: () => apiRequest('/auth/me'),
+    logout: () => {
+        localStorage.removeItem('token');
+    },
 };
 
-// Хранилище текущего пользователя
 let currentUser = null;
 
 export async function loadCurrentUser() {

@@ -1,22 +1,35 @@
-from fastapi import FastAPI
-from fastapi import FastAPI
+import os
 from app.routers import auth, movies
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+# Путь к статике (абсолютный)
+STATIC_DIR = "app/static"
+
 
 app = FastAPI(title="Movie Tracker")
 
+# Подключаем API роутеры (должны быть до catch-all)
 
+app.include_router(auth.router, prefix="/api")
+app.include_router(movies.router, prefix="/api")
 
-app.include_router(auth.router)
-app.include_router(movies.router)
+# Монтируем папку static – все файлы из неё будут доступны по /static/*
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
+# Catch-all для SPA: отдаёт index.html для всех маршрутов, кроме /api и /static
+@app.get("/{full_path:path}")
+async def serve_spa(full_path: str):
+    # Если путь начинается с api/ или static/ – не обрабатываем (они уже обработаны выше)
+    if full_path.startswith("api/") or full_path.startswith("static/"):
+        raise HTTPException(status_code=404)
 
-origins = "http://127.0.0.1:5000"
+    # Иначе отдаём index.html
+    index_path = os.path.join(STATIC_DIR, "index.html")
+    return FileResponse(index_path)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Обрабатываем корневой маршрут отдельно (хотя catch-all тоже сработает, но так надёжнее)
+@app.get("/")
+async def root():
+    return FileResponse(os.path.join(STATIC_DIR, "index.html"))

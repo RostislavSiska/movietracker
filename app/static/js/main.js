@@ -1,14 +1,34 @@
 // app/static/js/main.js
 import { renderHome } from './pages/home.js';
 import { renderProfile } from './pages/profilePage.js';
-import { loadCurrentUser, getCurrentUser } from './api.js';
+import { renderLogin } from './pages/login.js';
+import { renderRegister } from './pages/register.js';
+import { loadCurrentUser, getCurrentUser, authApi } from './api.js';
 
-// Простая маршрутизация
+// Храним ссылку на функцию поиска (будет загружена лениво)
+let renderSearchResultsFn = null;
+
+// Маршруты
 const routes = {
     '/': renderHome,
+    '/login': renderLogin,
+    '/register': renderRegister,
     '/profile/:username': (params) => renderProfile(params.username),
-    '/profile': () => renderProfile(), // профиль текущего пользователя
-    // можно добавить /login, /register и т.д.
+    '/profile': () => renderProfile(),
+    '/search': async () => {
+        // Извлекаем параметр q из URL
+        const params = new URLSearchParams(window.location.search);
+        const q = params.get('q');
+        if (q && q.trim()) {
+            if (!renderSearchResultsFn) {
+                const module = await import('./pages/home.js');
+                renderSearchResultsFn = module.renderSearchResults;
+            }
+            await renderSearchResultsFn(q);
+        } else {
+            await renderHome();
+        }
+    },
 };
 
 async function router() {
@@ -16,13 +36,9 @@ async function router() {
     const app = document.getElementById('app');
     app.innerHTML = '<div class="text-center"><div class="spinner-border text-primary"></div></div>';
 
-    // Загружаем информацию о текущем пользователе при каждом переходе
     await loadCurrentUser();
-
-    // Обновляем навигационную панель (логин/логаут)
     updateNav();
 
-    // Поиск подходящего маршрута
     let matchedRoute = null;
     let params = {};
 
@@ -34,8 +50,8 @@ async function router() {
             if (match) {
                 matchedRoute = routes[route];
                 const keys = route.match(/:\w+/g) || [];
-                keys.forEach((key, index) => {
-                    params[key.slice(1)] = match[index + 1];
+                keys.forEach((key, idx) => {
+                    params[key.slice(1)] = match[idx + 1];
                 });
                 break;
             }
@@ -64,13 +80,16 @@ function updateNav() {
             <li class="nav-item"><a class="nav-link" href="/profile/${user.username}">${user.username}</a></li>
             <li class="nav-item"><a class="nav-link" href="#" id="logout">Выйти</a></li>
         `;
-        document.getElementById('logout').addEventListener('click', (e) => {
-            e.preventDefault();
-            localStorage.removeItem('token');
-            loadCurrentUser().then(() => {
-                window.location.href = '/';
+        const logoutBtn = document.getElementById('logout');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                authApi.logout();
+                loadCurrentUser().then(() => {
+                    window.location.href = '/';
+                });
             });
-        });
+        }
     } else {
         navLinks.innerHTML = `
             <li class="nav-item"><a class="nav-link" href="/login">Вход</a></li>
@@ -79,21 +98,43 @@ function updateNav() {
     }
 }
 
-// Обработка переходов по ссылкам (SPA)
+// Обработка формы поиска
+document.addEventListener('DOMContentLoaded', () => {
+    const searchForm = document.getElementById('search-form');
+    const searchInput = document.getElementById('search-input');
+    if (searchForm) {
+        searchForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const query = searchInput.value.trim();
+            if (!query) return;
+
+            // Лениво загружаем функцию поиска, если ещё не загружена
+            if (!renderSearchResultsFn) {
+                const module = await import('./pages/home.js');
+                renderSearchResultsFn = module.renderSearchResults;
+            }
+            // Вызываем рендер результатов
+            await renderSearchResultsFn(query);
+            // Меняем URL, чтобы можно было поделиться или обновить страницу
+            window.history.pushState({}, '', `/search?q=${encodeURIComponent(query)}`);
+        });
+    }
+});
+
+// Обработка кликов по ссылкам (SPA)
 document.addEventListener('click', (e) => {
     const link = e.target.closest('a');
     if (link && link.href && link.href.startsWith(window.location.origin)) {
         e.preventDefault();
         const url = new URL(link.href);
-        if (url.pathname !== window.location.pathname) {
-            window.history.pushState({}, '', url.pathname);
+        if (url.pathname !== window.location.pathname || url.search !== window.location.search) {
+            window.history.pushState({}, '', url.pathname + url.search);
             router();
         }
     }
 });
 
-// Обработка кнопок назад/вперёд
 window.addEventListener('popstate', router);
 
-// Стартуем
+// Старт
 router();

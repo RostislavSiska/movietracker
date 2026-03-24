@@ -36,7 +36,6 @@ export function renderMovieGrid(movies, containerId = 'app') {
 
     container.innerHTML = `
         <div class="row row-cols-1 row-cols-md-3 row-cols-lg-5 g-4">
-            <!-- Карточки будут вставлены сюда -->
         </div>
     `;
     const row = container.querySelector('.row');

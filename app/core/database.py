@@ -1,11 +1,11 @@
 "Анотация, подключение к PostgreSQL, базовый класс"
+import os
 from datetime import datetime
 from typing import Annotated
 from sqlalchemy import func
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, DeclarativeBase
 from sqlalchemy.orm import Mapped, mapped_column
-import os
 from dotenv import load_dotenv
 
 load_dotenv()
